@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TCL Horizon OS - HYPERVISION</title>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-color: #ffffff;
+            --accent-color: #00F2FF;
+            --glass: rgba(30, 30, 35, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --cursor-glow: rgba(255, 255, 255, 0.15);
+            --ease-elastic: cubic-bezier(0.25, 1, 0.3, 1);
+        }
+
+        body {
+            margin: 0; background: var(--bg-color); color: var(--text-color);
+            font-family: 'Manrope', sans-serif; overflow: hidden;
+            height: 100vh; width: 100vw; user-select: none;
+        }
+
+        /* --- IMMERSIVE LAYERS --- */
+        #cinema-layer {
+            position: absolute; inset: 0; z-index: 0;
+            transition: transform 1s var(--ease-elastic);
+        }
+        
+        #bg-video {
+            width: 100%; height: 100%; object-fit: cover;
+            filter: brightness(0.5) blur(20px);
+            transition: all 1s ease;
+            transform: scale(1.1);
+        }
+        
+        /* When Cinema Mode is Active */
+        body.cinema-mode #bg-video {
+            filter: brightness(1) blur(0px);
+            transform: scale(1);
+        }
+        body.cinema-mode .ui-layer {
+            opacity: 0; transform: scale(1.05);
+            pointer-events: none;
+        }
+
+        .vignette {
+            position: absolute; inset: 0;
+            background: radial-gradient(circle at center, transparent 0%, #000 90%);
+            z-index: 1; pointer-events: none;
+        }
+
+        /* --- UI LAYER --- */
+        .ui-layer {
+            position: relative; z-index: 10; height: 100%;
+            display: grid; grid-template-columns: 100px 1fr;
+            transition: all 0.5s ease;
+        }
+
+        /* --- LIQUID CURSOR ( The Magic ) --- */
+        #cursor {
+            position: absolute; top: 0; left: 0;
+            background: var(--cursor-glow);
+            border: 2px solid rgba(255,255,255,0.8);
+            border-radius: 16px;
+            pointer-events: none; z-index: 5;
+            box-shadow: 0 0 50px rgba(255,255,255,0.2);
+            transition: 
+                width 0.3s var(--ease-elastic),
+                height 0.3s var(--ease-elastic),
+                transform 0.3s var(--ease-elastic),
+                opacity 0.2s ease;
+            /* Hardware Acceleration */
+            will-change: transform, width, height;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 40px; padding: 20px;
+        }
+        .icon {
+            font-size: 1.5rem; opacity: 0.5; transition: opacity 0.3s;
+            position: relative; z-index: 10;
+        }
+        .icon.active-nav { opacity: 1; color: var(--accent-color); }
+
+        /* --- MAIN CONTENT --- */
+        .content-area {
+            display: flex; flex-direction: column; justify-content: flex-end;
+            padding: 0 0 60px 40px; overflow: visible;
+        }
+
+        /* --- HERO --- */
+        .hero-unit {
+            margin-bottom: 50px; max-width: 800px;
+            transform-origin: bottom left;
+            transition: transform 0.4s ease;
+        }
+        .hero-tag {
+            background: #E60012; color: white; padding: 5px 12px;
+            font-weight: 800; font-size: 0.7rem; border-radius: 4px;
+            display: inline-block; margin-bottom: 15px; letter-spacing: 1px;
+        }
+        .hero-title {
+            font-size: 5rem; font-weight: 800; line-height: 0.95;
+            margin-bottom: 20px; text-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            background: linear-gradient(to bottom, #fff, #999);
+            -webkit-background-clip: text; color: transparent;
+        }
+        .hero-desc {
+            font-size: 1.1rem; opacity: 0.8; line-height: 1.6; margin-bottom: 30px;
+            max-width: 600px; text-shadow: 0 2px 5px black;
+        }
+        .hero-actions { display: flex; gap: 20px; }
+        .btn {
+            padding: 15px 35px; border-radius: 12px; font-weight: 700;
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); z-index: 10;
+        }
+
+        /* --- RAILS & CARDS --- */
+        .rail-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 20px; opacity: 0.9; }
+        .rail {
+            display: flex; gap: 30px; margin-bottom: 40px;
+            perspective: 1000px;
+        }
+        
+        .card {
+            min-width: 220px; height: 320px; border-radius: 18px;
+            position: relative; overflow: hidden;
+            background-size: cover; background-position: center;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        
+        .card.wide { min-width: 340px; height: 190px; }
+
+        .card-meta {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            padding: 20px; background: linear-gradient(to top, black, transparent);
+            transform: translateY(100%); transition: transform 0.3s ease;
+        }
+        
+        /* Note: We don't use :hover or .active class for styling anymore.
+           The #cursor element provides the focus visual. */
+        
+        /* --- AI ASSISTANT OVERLAY --- */
+        #prism-ai {
+            position: fixed; inset: 0; z-index: 900;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(20px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        #prism-ai.visible { opacity: 1; }
+        
+        #prism-orb {
+            width: 150px; height: 150px; border-radius: 50%;
+            background: radial-gradient(circle, #fff, var(--accent-color), transparent);
+            filter: blur(20px);
+            animation: pulseAI 2s infinite ease-in-out;
+            box-shadow: 0 0 100px var(--accent-color);
+        }
+        @keyframes pulseAI {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+
+        /* --- LIVE GAME MONITOR --- */
+        #game-monitor {
+            position: fixed; top: 40px; right: 40px;
+            width: 300px; padding: 20px;
+            background: rgba(0,0,0,0.8); border: 1px solid #333;
+            border-radius: 12px; z-index: 800;
+            transform: translateX(400px); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #game-monitor.visible { transform: translateX(0); }
+        
+        canvas { width: 100%; height: 60px; margin-top: 10px; display: block; border-bottom: 1px solid #333;}
+        .stat-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; }
+        .stat-big { font-size: 1.5rem; color: var(--accent-color); font-weight: 800; font-family: monospace; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Cinema Layer -->
+    <div id="cinema-layer">
+        <video id="bg-video" autoplay muted loop>
+            <source src="https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-1610-large.mp4" type="video/mp4">
+        </video>
+        <div class="vignette"></div>
+    </div>
+
+    <!-- Liquid Cursor -->
+    <div id="cursor"></div>
+
+    <!-- UI Layer -->
+    <div class="ui-layer">
+        
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="icon interactable" data-color="#00F2FF">🔍</div>
+            <div class="icon interactable" data-color="#E60012">🏠</div>
+            <div class="icon interactable" data-color="#FFD700">🎬</div>
+            <div class="icon interactable" data-color="#00FF00">🎮</div>
+            <div class="icon interactable" data-color="#BD00FF">👤</div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            
+            <!-- Hero Unit -->
+            <div class="hero-unit interactable" id="hero" data-color="#ffffff">
+                <div class="hero-tag">PREMIERE</div>
+                <div class="hero-title">COSMOS: REBORN</div>
+                <div class="hero-desc">Explore the furthest reaches of the galaxy in this stunning 8K documentary narrated by AI. Experience the void like never before.</div>
+                <div class="hero-actions">
+                    <div class="btn interactable" data-color="#ffffff">PLAY NOW</div>
+                    <div class="btn interactable" data-color="#aaaaaa">TRAILER</div>
+                </div>
+            </div>
+
+            <!-- Content Rail 1 -->
+            <div class="rail-title">Recommended for You</div>
+            <div class="rail">
+                <div class="card interactable" style="background-image: url('https://images.unsplash.com/photo-1596727147705-56a532a6d23c?w=500&q=80')" data-color="#ff0055">
+                    <div class="card-meta"><h3>Cyber City</h3></div>
+                </div>
+                <div class="card interactable" style="background-image: url('https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&q=80')" data-color="#ffaa00">
+                    <div class="card-meta"><h3>Dune Racing</h3></div>
+                </div>
+                <div class="card interactable" style="background-image: url('https://images.unsplash.com/photo-1626814026160-2237a95fc5a0?w=500&q=80')" data-color="#00ccff">
+                    <div class="card-meta"><h3>Sandstorm</h3></div>
+                </div>
+                <div class="card interactable" style="background-image: url('https://images.unsplash.com/photo-1511512578047-dfb367046420?w=500&q=80')" data-color="#E60012">
+                    <div class="card-meta"><h3>Velocity</h3></div>
+                </div>
+            </div>
+
+            <!-- Content Rail 2 -->
+             <div class="rail-title">Recent Apps</div>
+             <div class="rail">
+                 <div class="card wide interactable" style="background-image: url('https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=500&q=80')" data-color="#E50914"></div>
+                 <div class="card wide interactable" style="background-image: url('https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=500&q=80')" data-color="#FF0000"></div>
+             </div>
+
+        </main>
+    </div>
+
+    <!-- AI Overlay -->
+    <div id="prism-ai">
+        <div id="prism-orb"></div>
+        <h2 style="margin-top:40px; font-weight:200;">Listening...</h2>
+        <p style="opacity:0.6">"Show me action movies in 4K"</p>
+    </div>
+
+    <!-- Game Monitor -->
+    <div id="game-monitor">
+        <div class="stat-row">
+            <span>GPU USAGE</span>
+            <span style="color:#00F2FF">98%</span>
+        </div>
+        <div class="stat-big">120 FPS</div>
+        <canvas id="fps-graph" width="300" height="60"></canvas>
+        <div class="stat-row" style="margin-top:10px;">
+            <span>VRR: LOCKED</span>
+            <span>HDR: ON</span>
+        </div>
+    </div>
+
+    <script>
+        // --- LIQUID ENGINE VARIABLES ---
+        const cursor = document.getElementById('cursor');
+        const interactables = Array.from(document.querySelectorAll('.interactable'));
+        let activeIndex = 1; // Start on Home Icon
+        let cinemaTimer = null;
+        let isPrismActive = false;
+        let isGameMonitorActive = false;
+
+        // Initialize Focus
+        setFocus(interactables[activeIndex]);
+
+        // --- INPUT HANDLER ---
+        document.addEventListener('keydown', (e) => {
+            if (isPrismActive) {
+                if(e.code === 'Space') togglePrism();
+                return;
+            }
+
+            switch(e.code) {
+                case 'ArrowRight': navigate('right'); break;
+                case 'ArrowLeft': navigate('left'); break;
+                case 'ArrowUp': navigate('up'); break;
+                case 'ArrowDown': navigate('down'); break;
+                case 'Space': togglePrism(); break;
+                case 'KeyG': toggleGameMonitor(); break;
+                case 'Enter': triggerClick(); break;
+            }
+        });
+
+        // --- SPATIAL NAVIGATION (EUCLIDEAN) ---
+        function navigate(dir) {
+            const current = interactables[activeIndex].getBoundingClientRect();
+            const cX = current.x + current.width/2;
+            const cY = current.y + current.height/2;
+
+            let bestCandidate = -1;
+            let minDist = Infinity;
+
+            interactables.forEach((el, idx) => {
+                if(idx === activeIndex) return;
+                
+                const rect = el.getBoundingClientRect();
+                const tX = rect.x + rect.width/2;
+                const tY = rect.y + rect.height/2;
+
+                // Direction Filter
+                let matchesDir = false;
+                if(dir === 'ArrowRight' && tX > cX) matchesDir = true;
+                if(dir === 'ArrowLeft' && tX < cX) matchesDir = true;
+                if(dir === 'ArrowDown' && tY > cY) matchesDir = true;
+                if(dir === 'ArrowUp' && tY < cY) matchesDir = true;
+
+                if(matchesDir) {
+                    // Weighted Distance (Prioritize Axis Alignment)
+                    const dX = Math.abs(tX - cX);
+                    const dY = Math.abs(tY - cY);
+                    const dist = Math.sqrt(dX*dX + dY*dY);
+                    
+                    // Penalty for being far off-axis
+                    const penalty = (dir === 'ArrowLeft' || dir === 'ArrowRight') ? dY * 3 : dX * 3;
+                    
+                    if(dist + penalty < minDist) {
+                        minDist = dist + penalty;
+                        bestCandidate = idx;
+                    }
+                }
+            });
+
+            if(bestCandidate !== -1) setFocus(interactables[bestCandidate], bestCandidate);
+        }
+
+        // --- CORE FOCUS LOGIC ---
+        function setFocus(el, index) {
+            if(index !== undefined) activeIndex = index;
+            
+            // 1. Move Cursor
+            const rect = el.getBoundingClientRect();
+            
+            // Add padding to cursor
+            const pad = 10;
+            cursor.style.transform = `translate(${rect.left - pad}px, ${rect.top - pad}px)`;
+            cursor.style.width = `${rect.width + (pad*2)}px`;
+            cursor.style.height = `${rect.height + (pad*2)}px`;
+            
+            // 2. Color Extraction
+            const color = el.getAttribute('data-color') || '#ffffff';
+            cursor.style.borderColor = color;
+            cursor.style.boxShadow = `0 0 60px ${color}40`; // 40 is hex opacity
+
+            // 3. Cinema Mode Logic (Only for Hero Unit)
+            resetCinemaMode();
+            if(el.id === 'hero') {
+                cinemaTimer = setTimeout(() => {
+                    document.body.classList.add('cinema-mode');
+                }, 2000);
+            }
+        }
+
+        function resetCinemaMode() {
+            clearTimeout(cinemaTimer);
+            document.body.classList.remove('cinema-mode');
+        }
+
+        function triggerClick() {
+            const el = interactables[activeIndex];
+            el.style.transform = "scale(0.95)";
+            setTimeout(() => el.style.transform = "", 150);
+        }
+
+        // --- PRISM AI VISUALIZER ---
+        function togglePrism() {
+            isPrismActive = !isPrismActive;
+            const overlay = document.getElementById('prism-ai');
+            if(isPrismActive) overlay.classList.add('visible');
+            else overlay.classList.remove('visible');
+        }
+
+        // --- GAME MONITOR GRAPHING ---
+        let graphInterval;
+        function toggleGameMonitor() {
+            isGameMonitorActive = !isGameMonitorActive;
+            const mon = document.getElementById('game-monitor');
+            if(isGameMonitorActive) {
+                mon.classList.add('visible');
+                startGraph();
+            } else {
+                mon.classList.remove('visible');
+                clearInterval(graphInterval);
+            }
+        }
+
+        function startGraph() {
+            const canvas = document.getElementById('fps-graph');
+            const ctx = canvas.getContext('2d');
+            let data = new Array(50).fill(30);
+
+            clearInterval(graphInterval);
+            graphInterval = setInterval(() => {
+                // Shift data
+                data.shift();
+                // Simulate FPS fluctuation (50-60 range)
+                data.push(Math.random() * 20 + 30); 
+
+                // Draw
+                ctx.clearRect(0, 0, 300, 60);
+                ctx.strokeStyle = '#00F2FF';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                data.forEach((val, i) => {
+                    const x = i * (300/50);
+                    const y = 60 - val;
+                    if(i===0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }, 100);
+        }
+
+    </script>
+</body>
+</html>
